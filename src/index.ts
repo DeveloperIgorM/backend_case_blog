@@ -28,6 +28,8 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => { // Im
   res.status(500).json({ message: 'Erro interno do servidor.' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+
+app.listen(PORT, () => {  
+  console.log(`Servidor rodando na porta ${PORT}!`);
+  console.log(`URL:http//localhost:${PORT}/api`)
 });
