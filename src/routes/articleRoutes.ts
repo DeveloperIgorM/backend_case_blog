@@ -1,4 +1,8 @@
+
 import express from "express";
+
+import { authenticateToken } from "../../src/middleware/auth";
+
 import {
   createArticle,
   getAllArticles,
@@ -7,7 +11,6 @@ import {
   deleteArticle,
 } from "../controllers/articleController";
 
-import { authenticateToken } from "../../src/middleware/auth";
 
 const router = express.Router();
 

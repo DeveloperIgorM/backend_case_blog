@@ -1,9 +1,12 @@
-// import express from 'express';
+
 import cors from 'cors';
 import dotenv from 'dotenv';
+import express, { Application, Request, Response, NextFunction } from 'express';
+
 import userRoutes from './routes/userRoutes';
 import articleRoutes from './routes/articleRoutes';
-import express, { Application, Request, Response, NextFunction } from 'express';
+import uploadRoutes from './routes/uploadRoutes';
+
 
 dotenv.config();
 
@@ -13,18 +16,22 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Arquivos estáticos vão ficar na nesta pasta, para que as imagens possam ser acessadas via URL
+app.use('/uploads', express.static('uploads')); 
+
 // Rotas principais
 app.use('/api/users', userRoutes);
 app.use('/api/articles', articleRoutes);
+app.use('/api/uploads', uploadRoutes);
 
-// Tratamento de rota não encontrada (404)
-app.use((req: Request, res: Response) => { // Importar Request, Response do 'express'
+// Tratamento de rota
+app.use((req: Request, res: Response) => {
   res.status(404).json({ message: 'Rota não encontrada.' });
 });
 
-// Tratamento de erros globais (500)
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => { // Importar NextFunction
-  console.error(err.stack); // Loga o stack trace do erro para depuração
+// Tratamento de erros globais 
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => { 
+  console.error(err.stack); 
   res.status(500).json({ message: 'Erro interno do servidor.' });
 });
 

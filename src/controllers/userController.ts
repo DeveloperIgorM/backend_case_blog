@@ -1,3 +1,4 @@
+
 import { Request, Response } from 'express';
 import db from '../config/db';
 import bcrypt from 'bcrypt';
@@ -9,6 +10,7 @@ export const registerUser = async (req: Request, res: Response) => {
   const { nome, email, senha } = req.body;
 
   try {
+    // Registrando usuário
     const hashedPassword = await bcrypt.hash(senha, 10);
 
     await db.query(
@@ -26,6 +28,7 @@ export const loginUser = async (req: Request, res: Response) => {
   const { email, senha } = req.body;
 
   try {
+    // Verificando se as credencias do usuário são válidas
     const [rows]: any = await db.query('SELECT * FROM users WHERE email = ?', [email]);
 
     if (rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado' });
