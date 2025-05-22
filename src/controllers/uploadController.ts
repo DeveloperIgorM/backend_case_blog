@@ -15,7 +15,7 @@ export const uploadImage = async (req: Request, res: Response) => {
   const imagePath = `uploads/${req.file.filename}`;
 
   try {
-    res.status(200).json({
+    res.status(200).json({  
       message: 'Upload de imagem realizado com sucesso!',
       fileName: req.file.filename,
       filePath: imagePath, 
@@ -34,3 +34,4 @@ export const uploadImage = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Erro ao processar o upload da imagem.' });
   }
 };
+export default uploadImage; 

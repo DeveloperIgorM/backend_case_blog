@@ -1,13 +1,11 @@
-
 import { Router } from 'express';
-import { uploadImage } from '../../src/controllers/uploadController';
-import { authenticateToken } from '../middleware/auth'; 
+import uploadImage from '../controllers/uploadController';
+import { authMiddleware } from '../middleware/auth'; // CORRIGIDO PARA 'auth'
 
-import  upload  from '../config/multer'
- 
+import upload from '../config/multer';
+
 const router = Router();
 
-// Rota para upload de imagem
-router.post('/image', authenticateToken, upload.single('image'), uploadImage);
+router.post('/image', authMiddleware, upload.single('image'), uploadImage);
 
 export default router;
