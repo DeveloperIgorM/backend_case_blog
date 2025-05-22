@@ -17,10 +17,6 @@ app.use(express.json());
 app.use('/api/users', userRoutes);
 app.use('/api/articles', articleRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
-
 // Tratamento de rota não encontrada (404)
 app.use((req: Request, res: Response) => { // Importar Request, Response do 'express'
   res.status(404).json({ message: 'Rota não encontrada.' });

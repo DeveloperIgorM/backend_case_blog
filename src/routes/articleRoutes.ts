@@ -7,7 +7,7 @@ import {
   deleteArticle,
 } from "../controllers/articleController";
 
-import { authenticateToken } from "../middleware/auth";
+import { authenticateToken } from "../../src/middleware/auth";
 
 const router = express.Router();
 
