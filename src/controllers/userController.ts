@@ -1,10 +1,11 @@
-// src/controllers/UserController.ts
+// src/controllers/userController.ts
 import { Request, Response } from 'express';
 import db from '../config/db';
-import bcrypt from 'bcrypt'; // Se for permitir a atualização de senha
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { unlink } from 'fs/promises'; // Para deletar avatar antigo
 import path from 'path'; // Para construir caminhos de arquivo
+import fs from 'fs'; // Importe 'fs' para fs.existsSync
 
 const SECRET = process.env.JWT_SECRET || 'segredo';
 
@@ -15,7 +16,7 @@ declare global {
       user?: {
         id: number;
         email: string;
-        nome?: string; // Se você quiser que o nome esteja no token também
+        nome?: string;
       };
       file?: Express.Multer.File; // Para o upload de avatar
     }
@@ -32,7 +33,7 @@ export const registerUser = async (req: Request, res: Response) => {
     );
     res.status(201).json({ message: 'Usuário registrado com sucesso!' });
   } catch (error: any) {
-    if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) { // Erro de chave duplicada (e.g., email)
+    if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
       return res.status(409).json({ message: 'Email já cadastrado.' });
     }
     console.error('Erro ao registrar usuário:', error);
@@ -43,12 +44,14 @@ export const registerUser = async (req: Request, res: Response) => {
 export const loginUser = async (req: Request, res: Response) => {
   const { email, senha } = req.body;
   try {
+    // Removido 'sobrenome' da query SELECT
     const [rows]: any = await db.query('SELECT id, nome, email, senha, avatar_url FROM users WHERE email = ?', [email]);
     if (rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado' });
     const user = rows[0];
     const match = await bcrypt.compare(senha, user.senha);
     if (!match) return res.status(401).json({ message: 'Senha incorreta' });
     const token = jwt.sign({ id: user.id, nome: user.nome, email: user.email }, SECRET, { expiresIn: '1h' });
+    // Removido 'sobrenome' do objeto user retornado
     res.json({ token, user: { id: user.id, nome: user.nome, email: user.email, avatar_url: user.avatar_url } });
   } catch (error) {
     console.error('Erro ao fazer login:', error);
@@ -62,6 +65,7 @@ export const getProfile = async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Usuário não autenticado.' });
   }
   try {
+    // Removido 'sobrenome' da query SELECT
     const [rows]: any = await db.query('SELECT id, nome, email, avatar_url FROM users WHERE id = ?', [userId]);
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado.' });
@@ -73,16 +77,18 @@ export const getProfile = async (req: Request, res: Response) => {
   }
 };
 
-// === NOVO ENDPOINT: ATUALIZAR PERFIL ===
 export const updateProfile = async (req: Request, res: Response) => {
   const userId = req.user?.id;
-  const { nome, email, senha } = req.body;
+
+  // Removido 'sobrenome' da desestruturação do body
+  const { nome, email, removeAvatar } = req.body;
   const newAvatarFile = req.file;
 
   if (!userId) {
-    if (newAvatarFile) { // Se um novo arquivo foi enviado e a operação falhou por auth
+    if (newAvatarFile) {
       try {
-        await unlink(path.resolve(__dirname, '..', '..', newAvatarFile.path));
+        // Caminho corrigido para garantir que sempre aponta para a pasta 'uploads' na raiz do projeto
+        await unlink(path.resolve(__dirname, '..', '..', 'uploads', newAvatarFile.filename));
       } catch (unlinkErr) {
         console.error('Erro ao remover arquivo após falha de autenticação (updateProfile):', unlinkErr);
       }
@@ -91,10 +97,11 @@ export const updateProfile = async (req: Request, res: Response) => {
   }
 
   try {
-    const [userRows]: any = await db.query('SELECT nome, email, senha, avatar_url FROM users WHERE id = ?', [userId]);
+    // Removido 'sobrenome' da query SELECT
+    const [userRows]: any = await db.query('SELECT nome, email, avatar_url FROM users WHERE id = ?', [userId]);
     if (userRows.length === 0) {
       if (newAvatarFile) {
-        await unlink(path.resolve(__dirname, '..', '..', newAvatarFile.path));
+        await unlink(path.resolve(__dirname, '..', '..', 'uploads', newAvatarFile.filename));
       }
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
@@ -102,35 +109,47 @@ export const updateProfile = async (req: Request, res: Response) => {
 
     let queryParts: string[] = [];
     let queryValues: any[] = [];
+    let updatedFields: any = { ...currentUser };
 
-    if (nome !== undefined && nome !== currentUser.nome) { // Use 'undefined' para verificar se foi enviado
+    // Lógica para atualizar 'nome'
+    if (nome !== undefined && nome !== currentUser.nome) {
       queryParts.push('nome = ?');
       queryValues.push(nome);
+      updatedFields.nome = nome;
     }
+
+    // A seção de 'sobrenome' foi completamente removida
+
+    // Lógica para atualizar 'email'
     if (email !== undefined && email !== currentUser.email) {
       const [existingEmail]: any = await db.query('SELECT id FROM users WHERE email = ? AND id != ?', [email, userId]);
       if (existingEmail.length > 0) {
         if (newAvatarFile) {
-          await unlink(path.resolve(__dirname, '..', '..', newAvatarFile.path));
+          await unlink(path.resolve(__dirname, '..', '..', 'uploads', newAvatarFile.filename));
         }
         return res.status(409).json({ message: 'Este email já está em uso por outro usuário.' });
       }
       queryParts.push('email = ?');
       queryValues.push(email);
-    }
-    if (senha) { // Se uma nova senha for fornecida
-      const hashedPassword = await bcrypt.hash(senha, 10);
-      queryParts.push('senha = ?');
-      queryValues.push(hashedPassword);
+      updatedFields.email = email;
     }
 
+    // Lógica para atualizar 'avatar_url'
     let newAvatarUrl: string | null = currentUser.avatar_url;
+
     if (newAvatarFile) {
-      const oldAvatarPath = currentUser.avatar_url ? path.join(__dirname, '../../', currentUser.avatar_url) : null;
+      // O Multer já salva o arquivo em 'uploads/', então o path do arquivo já virá com 'uploads/' ou apenas o nome do arquivo.
+      // É crucial que `newAvatarFile.filename` seja apenas o nome do arquivo, e `uploads/` seja o diretório raiz.
+      // O caminho completo no DB deve ser `uploads/nome-do-arquivo.ext`.
       newAvatarUrl = `uploads/${newAvatarFile.filename}`;
+      
+      const oldAvatarPath = currentUser.avatar_url ? path.join(__dirname, '../../', currentUser.avatar_url) : null;
+      
       queryParts.push('avatar_url = ?');
       queryValues.push(newAvatarUrl);
+      updatedFields.avatar_url = newAvatarUrl;
 
+      // Deleta o avatar antigo se existir e não for o padrão
       if (oldAvatarPath && fs.existsSync(oldAvatarPath)) {
         try {
           await unlink(oldAvatarPath);
@@ -138,29 +157,32 @@ export const updateProfile = async (req: Request, res: Response) => {
           console.warn('Erro ao deletar avatar antigo:', unlinkError);
         }
       }
-    } else if (req.body.avatar_url === null || req.body.avatar_url === '') { // Se o frontend pediu para remover o avatar explicitamente
+    } else if (removeAvatar === 'true') { // Se o frontend explicitamente pediu para remover o avatar
         if (currentUser.avatar_url) {
             const oldAvatarPath = path.join(__dirname, '../../', currentUser.avatar_url);
             if (fs.existsSync(oldAvatarPath)) {
                 try {
                     await unlink(oldAvatarPath);
                 } catch (unlinkErr) {
-                    console.warn('Erro ao remover avatar antigo (null request):', unlinkErr);
+                    console.warn('Erro ao remover avatar antigo (requisição de remoção):', unlinkErr);
                 }
             }
         }
         queryParts.push('avatar_url = ?');
-        queryValues.push(null);
-        newAvatarUrl = null;
+        queryValues.push(null); // Define avatar_url como null no DB
+        updatedFields.avatar_url = null;
     }
 
 
+    // Se não há alterações a serem feitas, retorne uma mensagem
     if (queryParts.length === 0) {
-      return res.status(200).json({ message: 'Nenhuma alteração foi fornecida.' });
+      // Retorna o usuário atualizado mesmo que não haja alterações para garantir consistência
+      return res.status(200).json({ message: 'Nenhuma alteração foi fornecida.', user: updatedFields });
     }
 
+    // Construir e executar a query de atualização
     const updateQuery = `UPDATE users SET ${queryParts.join(', ')}, updated_at = NOW() WHERE id = ?`;
-    queryValues.push(userId);
+    queryValues.push(userId); // Adicione o userId ao final dos valores
 
     const [result]: any = await db.query(updateQuery, queryValues);
 
@@ -168,20 +190,18 @@ export const updateProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Usuário não encontrado para atualização.' });
     }
 
-    const updatedUser = {
-      id: userId,
-      nome: nome !== undefined ? nome : currentUser.nome,
-      email: email !== undefined ? email : currentUser.email,
-      avatar_url: newAvatarUrl
-    };
+    // Busque o usuário atualizado novamente para garantir que os dados estão frescos do DB
+    // Removido 'sobrenome' da query SELECT final
+    const [finalUserRows]: any = await db.query('SELECT id, nome, email, avatar_url FROM users WHERE id = ?', [userId]);
+    const finalUpdatedUser = finalUserRows[0];
 
-    res.status(200).json({ message: 'Perfil atualizado com sucesso!', user: updatedUser });
+    res.status(200).json({ message: 'Perfil atualizado com sucesso!', user: finalUpdatedUser });
 
   } catch (err: any) {
     console.error('Erro ao atualizar perfil do usuário:', err);
-    if (newAvatarFile) { // Se um novo arquivo foi enviado e a operação falhou
+    if (newAvatarFile) { // Se um novo arquivo foi enviado e a operação falhou, remova-o
       try {
-        await unlink(path.resolve(__dirname, '..', '..', newAvatarFile.path));
+        await unlink(path.resolve(__dirname, '..', '..', 'uploads', newAvatarFile.filename));
       } catch (unlinkErr) {
         console.error('Erro ao remover novo arquivo após falha na atualização (updateProfile):', unlinkErr);
       }
